@@ -1,6 +1,6 @@
 # Controle de Estoque: Elétrica, Hidráulica e Segurança Eletrônica
 
-Sistema web completo para controle de estoque de loja de materiais, com banco de dados SQLite embutido. Não precisa instalar nenhum servidor de banco.
+Programa completo de controle de estoque para loja de materiais, com banco de dados SQLite embutido. Não precisa instalar nenhum servidor de banco nem ter internet.
 
 ## Funcionalidades
 
@@ -12,22 +12,62 @@ Sistema web completo para controle de estoque de loja de materiais, com banco de
 - **Painel:** valor do estoque (custo e venda), itens abaixo do mínimo, valor por setor e últimas movimentações.
 - **Relatórios CSV** (abrem no Excel): posição de estoque, lista de compras (itens a repor) e movimentações por período.
 - **Backup** do banco com um clique (admin).
-- Funciona no celular e no computador, com tema claro e escuro.
+- **Programa para Windows** com backup automático diário, que funciona sem internet. Também pode rodar como site/servidor.
+- Tema claro e escuro.
 
-## Rodando no seu computador
+## Programa para Windows (PC)
+
+O sistema é um **programa de computador**: abre numa janela própria, tem ícone na área de trabalho e **funciona sem internet**. Os dados ficam no próprio PC.
+
+### Instalar
+
+**Opção A: versão portátil (.zip)**
+1. Baixe `Controle-de-Estoque-1.0.0-Windows-portatil.zip`.
+2. Clique com o botão direito → **Extrair tudo…** (por exemplo, para `C:\Controle de Estoque`).
+3. Dê dois cliques em **Controle de Estoque.exe**. Se quiser, crie um atalho na área de trabalho (botão direito → Enviar para → Área de trabalho).
+
+**Opção B: instalador (.exe)**, que cria atalho e entrada no Menu Iniciar sozinho:
+1. No GitHub, abra a aba **Actions** → **Instalador Windows** → **Run workflow**.
+2. Espere cerca de 5 minutos e baixe o arquivo em **Artifacts** → `Controle-de-Estoque-Windows`.
+3. Rode `Instalar-Controle-de-Estoque-1.0.0.exe` e siga os passos.
+
+> Na primeira vez, o Windows pode mostrar **"O Windows protegeu o computador"** (porque o programa não tem assinatura digital paga). Clique em **Mais informações → Executar assim mesmo**.
+
+Login inicial: **admin@loja.com** / **admin123**. Troque a senha no primeiro acesso (botão "Senha", no canto superior).
+
+### Onde ficam os dados e os backups
+
+- Banco de dados: `%APPDATA%\Controle de Estoque\dados\estoque.db`
+- **Backup automático:** toda vez que o programa abre, ele guarda uma cópia do dia em `...\dados\backups` (mantém os 15 últimos dias).
+- Menu **Arquivo → Fazer backup agora** (Ctrl+B): salva uma cópia onde você quiser. Recomendo um pendrive ou o Google Drive, para não perder tudo se o PC der problema.
+- Menu **Arquivo → Restaurar backup**: volta os dados de um backup. Antes de restaurar, ele guarda uma cópia dos dados atuais por segurança.
+- Desinstalar o programa **não apaga** os dados.
+
+**Trocar de computador:** faça um backup no PC antigo, instale o programa no novo e use *Restaurar backup*.
+
+### Para quem for mexer no código
+
+```bash
+npm install
+npm run app          # abre o programa (janela desktop)
+npm test             # testes automatizados
+npm run dist:win     # gera instalador e .zip em dist/ (no Windows; no Linux exige Wine)
+npm start            # modo servidor/site em http://localhost:3000
+```
+
+---
+
+## Modo servidor (opcional: vários computadores ou acesso pelo celular)
+
+O programa desktop é para **um computador**. Se a loja precisar usar o estoque em vários PCs ao mesmo tempo, rode o mesmo sistema em **modo servidor**, num PC da loja ou na nuvem, e acesse pelo navegador.
+
+### Rodando como servidor num PC
 
 1. Instale o **Node.js 22.13 ou mais novo**: <https://nodejs.org> (versão LTS).
-2. No terminal, dentro da pasta do projeto:
-   ```bash
-   npm install
-   npm start
-   ```
-3. Abra <http://localhost:3000>
-   - Login inicial: **admin@loja.com** / **admin123** (troque em "Senha" logo no primeiro acesso)
+2. Na pasta do projeto: `npm install` e depois `npm start`.
+3. Abra <http://localhost:3000>. Os outros PCs e celulares do mesmo Wi-Fi acessam por `http://IP-DO-PC:3000` (descubra o IP com `ipconfig`).
 
-O banco fica em `data/estoque.db`. Na primeira execução ele é criado com ~30 produtos de exemplo. Para começar vazio, rode com `SEM_DADOS_EXEMPLO=1`.
-
-> **Usar na rede da loja:** rodando num PC da loja, os outros computadores e celulares do mesmo Wi-Fi acessam por `http://IP-DO-PC:3000` (descubra o IP com `ipconfig` no Windows).
+O banco fica em `data/estoque.db`. Para começar sem os produtos de exemplo, rode com `SEM_DADOS_EXEMPLO=1`.
 
 ### Variáveis de ambiente
 
@@ -37,14 +77,6 @@ O banco fica em `data/estoque.db`. Na primeira execução ele é criado com ~30 
 | `DB_PATH` | Onde fica o arquivo do banco | `data/estoque.db` |
 | `ADMIN_EMAIL` / `ADMIN_SENHA` | Primeiro administrador (só na criação do banco) | `admin@loja.com` / `admin123` |
 | `SEM_DADOS_EXEMPLO` | `1` para não inserir os produtos de exemplo | — |
-
-### Testes
-
-```bash
-npm test
-```
-
----
 
 ## Como colocar na nuvem
 
@@ -122,12 +154,14 @@ docker run -d --name estoque --restart unless-stopped -p 3000:3000 -v estoque-da
 ## Estrutura
 
 ```
+electron/main.js → programa desktop (janela, menu, backups)
 src/db.js        → criação das tabelas, transações e dados iniciais
 src/server.js    → API REST (Express)
 public/          → interface web (HTML/CSS/JS puro)
 test/            → testes automatizados da API
 Dockerfile       → imagem para VPS / qualquer nuvem com Docker
 render.yaml      → deploy de 1 clique no Render
+.github/workflows/instalador-windows.yml → gera o instalador .exe no GitHub
 ```
 
 ### Tabelas do banco

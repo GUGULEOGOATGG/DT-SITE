@@ -2,15 +2,72 @@
   "name": "dt-estoque",
   "version": "1.0.0",
   "description": "Sistema de controle de estoque para loja de elétrica, hidráulica e segurança eletrônica",
-  "main": "src/server.js",
+  "main": "electron/main.js",
   "type": "commonjs",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
+    "app": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist": "electron-builder",
+    "servidor": "node --disable-warning=ExperimentalWarning src/server.js",
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
-    "dev": "node --watch --disable-warning=ExperimentalWarning src/server.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
   },
   "dependencies": {
     "express": "5.1.0"
+  },
+  "devDependencies": {
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0"
+  },
+  "productName": "Controle de Estoque",
+  "author": "Loja",
+  "build": {
+    "appId": "br.com.loja.estoque",
+    "productName": "Controle de Estoque",
+    "copyright": "Uso interno da loja",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "public/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Controle-de-Estoque-${version}-Windows-portatil.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Controle de Estoque",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Instalar-Controle-de-Estoque-${version}.${ext}"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office"
+    },
+    "electronLanguages": [
+      "pt-BR",
+      "en-US"
+    ]
   }
 }

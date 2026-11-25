@@ -1,0 +1,19 @@
+# Deploy automático no Render (render.com) — "New > Blueprint" e aponte para este repositório
+services:
+  - type: web
+    name: estoque
+    runtime: node
+    plan: starter            # disco persistente exige plano pago (o free apaga o banco a cada deploy)
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    envVars:
+      - key: DB_PATH
+        value: /var/data/estoque.db
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_SENHA
+        sync: false
+    disk:
+      name: dados
+      mountPath: /var/data
+      sizeGB: 1

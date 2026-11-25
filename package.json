@@ -1,0 +1,16 @@
+{
+  "name": "dt-estoque",
+  "version": "1.0.0",
+  "description": "Sistema de controle de estoque para loja de elétrica, hidráulica e segurança eletrônica",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "5.1.0"
+  }
+}

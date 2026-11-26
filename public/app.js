@@ -32,6 +32,9 @@ const ICONES = {
   restaurar: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
   menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
+  engrenagem: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  nuvem: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
+  rede: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   zerado: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
 };
 const ic = (nome) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONES[nome] || ''}</svg>`;
@@ -49,7 +52,10 @@ const TIPOS = { entrada: 'Entrada', saida: 'Saída', ajuste: 'Ajuste' };
 const UNIDADES = ['UN', 'M', 'RL', 'BR', 'CX', 'PC', 'KG', 'L', 'PAR', 'KIT'];
 const setorTag = (s) => (s ? `<span class="etiqueta setor-${esc(s)}">${esc(SETORES[s] || s)}</span>` : '<span class="suave">—</span>');
 const tipoTag = (t) => `<span class="etiqueta tipo-${esc(t)}">${esc(TIPOS[t] || t)}</span>`;
-const DESKTOP = typeof window.desktop === 'object' && window.desktop !== null;
+const DESKTOP = typeof window.desktop === 'object' && window.desktop !== null; // dentro do programa do PC
+const PRINCIPAL = DESKTOP && window.desktop.modo === 'principal'; // PC que guarda os dados
+// Data de hoje no fuso do computador (toISOString usa UTC e erra depois das 21h no Brasil)
+const dataLocal = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 function medidor(p) {
   const nivel = p.estoque <= 0 ? 'zero' : p.estoque <= p.estoque_minimo ? 'baixo' : 'ok';
@@ -136,7 +142,7 @@ async function sair(chamarApi = true) {
   if (chamarApi) await api('/logout', { method: 'POST' }).catch(() => {});
   token = null; usuario = null;
   localStorage.removeItem('token');
-  $('#app').hidden = true; $('#tela-login').hidden = false;
+  mostrarLogin();
 }
 function trocarSenha() {
   abrirModal('Alterar senha', `<div class="form-grade">
@@ -159,10 +165,11 @@ const MENU = [
   { id: 'relatorios', nome: 'Relatórios', icone: 'relatorio' },
   { id: 'backup', nome: 'Backup', icone: 'backup', admin: true },
   { id: 'usuarios', nome: 'Usuários', icone: 'usuarios', admin: true },
+  { id: 'configuracoes', nome: 'Configurações', icone: 'engrenagem', desktop: true },
 ];
 function montarMenu() {
   const admin = usuario?.perfil === 'admin';
-  $('#menu').innerHTML = MENU.filter((m) => !m.admin || admin).map((m) => (m.secao
+  $('#menu').innerHTML = MENU.filter((m) => (!m.admin || admin) && (!m.desktop || DESKTOP)).map((m) => (m.secao
     ? `<div class="lateral-secao">${m.secao}</div>`
     : `<a href="#${m.id}" data-id="${m.id}">${ic(m.icone)}<span>${m.nome}</span>${m.contador ? '<span class="contador" id="contador-repor" hidden></span>' : ''}</a>`)).join('');
 }
@@ -196,6 +203,8 @@ telas.painel = async (el) => {
   const kpi = (tom, icone, rotulo, valor, nota = '') => `<div class="cartao kpi"><div class="kpi-icone ${tom}">${ic(icone)}</div>
     <div><div class="kpi-rotulo">${rotulo}</div><div class="kpi-valor">${valor}</div>${nota ? `<div class="kpi-nota">${nota}</div>` : ''}</div></div>`;
   const movIcone = { entrada: ['tom-verde', 'entrada'], saida: ['tom-vermelho', 'saida'], ajuste: ['tom-laranja', 'ajuste'] };
+
+  if (r.total_produtos === 0) return primeirosPassos(el, `${saudacao}, ${esc(primeiroNome)}`);
 
   el.innerHTML = cabecalho(`${saudacao}, ${esc(primeiroNome)}`, 'Resumo do estoque da loja hoje.',
     `<a class="btn" href="#relatorios">${ic('relatorio')}Relatórios</a><a class="btn primario" href="#movimentar">${ic('movimentar')}Lançar entrada / saída</a>`) + `
@@ -242,6 +251,27 @@ telas.painel = async (el) => {
   </div>`;
 };
 
+// Painel de uma loja que ainda não cadastrou nada
+async function primeirosPassos(el, titulo) {
+  const admin = usuario.perfil === 'admin';
+  const [cats, forns, bkp] = await Promise.all([api('/categorias'), api('/fornecedores'), admin ? api('/backups') : null]);
+  const passos = [
+    { feito: cats.length > 0, titulo: 'Crie as categorias', texto: 'Ex.: Fios e Cabos, Tubos PVC, Câmeras. Dá para criar as sugeridas com um clique.', link: '#categorias', botao: 'Ir para Categorias' },
+    { feito: forns.length > 0, titulo: 'Cadastre os fornecedores', texto: 'De quem a loja compra. Ajuda a saber para quem pedir cada produto.', link: '#fornecedores', botao: 'Ir para Fornecedores', opcional: true },
+    { feito: false, titulo: 'Cadastre os produtos', texto: 'Informe o estoque atual de cada item como "estoque inicial". O leitor de código de barras funciona no cadastro.', link: '#produtos/novo', botao: 'Cadastrar produto' },
+  ];
+  if (admin && PRINCIPAL) passos.push({ feito: !!bkp?.extra?.pasta, titulo: 'Ligue o backup na nuvem', texto: 'Cópia automática no Google Drive ou OneDrive, de graça.', link: '#backup', botao: 'Ir para Backup' });
+  if (admin) passos.push({ feito: false, titulo: 'Crie o login dos funcionários', texto: 'Cada um entra com o próprio e-mail, e o histórico mostra quem fez cada lançamento.', link: '#usuarios', botao: 'Ir para Usuários', opcional: true });
+  el.innerHTML = cabecalho(titulo, 'Seu estoque está vazio. Siga os passos abaixo para começar.') + `
+  <div class="cartao"><ul class="lista passos">
+    ${passos.map((p, i) => `<li class="${p.feito ? 'feito' : ''}">
+      <span class="passo-num">${p.feito ? ic('ok') : i + 1}</span>
+      <div class="cresce"><strong>${p.titulo}${p.opcional ? ' <small class="suave">(opcional)</small>' : ''}</strong><small>${p.texto}</small></div>
+      ${p.feito ? '<span class="etiqueta tipo-entrada">Feito</span>' : `<a class="btn ${i === passos.findIndex((x) => !x.feito) ? 'primario' : ''}" href="${p.link}">${p.botao}</a>`}
+    </li>`).join('')}
+  </ul></div>`;
+}
+
 // ---------- Produtos ----------
 telas.produtos = async (el, param) => {
   await carregarAuxiliares();
@@ -253,6 +283,7 @@ telas.produtos = async (el, param) => {
       <select id="f-setor"><option value="">Todos os setores</option>${Object.entries(SETORES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
       <select id="f-cat">${opcoes(cache.categorias, '', 'Todas as categorias')}</select>
       <label class="check"><input type="checkbox" id="f-baixo" ${param === 'repor' ? 'checked' : ''}> Só para repor</label>
+      <label class="check"><input type="checkbox" id="f-inativos"> Mostrar desativados</label>
     </div>
     <div class="tabela-wrap"><table>
       <thead><tr><th>Produto</th><th>Setor</th><th>Local</th><th class="num">Estoque</th><th class="num">Custo</th><th class="num">Venda</th><th></th></tr></thead>
@@ -262,25 +293,29 @@ telas.produtos = async (el, param) => {
 
   const admin = usuario.perfil === 'admin';
   const lista = async () => {
-    const p = new URLSearchParams({ busca: $('#f-busca').value, setor: $('#f-setor').value, categoria_id: $('#f-cat').value, baixo: $('#f-baixo').checked ? '1' : '' });
+    const p = new URLSearchParams({ busca: $('#f-busca').value, setor: $('#f-setor').value, categoria_id: $('#f-cat').value, baixo: $('#f-baixo').checked ? '1' : '', inativos: $('#f-inativos').checked ? '1' : '' });
     const itens = await api('/produtos?' + p);
+    const filtrando = [...p.values()].some(Boolean);
     $('#lista-produtos').innerHTML = itens.map((i) => `<tr>
-      <td class="quebra"><div class="produto-nome">${esc(i.nome)}</div><div class="produto-meta"><span class="codigo">${esc(i.codigo)}</span> ${[i.marca, i.categoria].filter(Boolean).map(esc).join(' · ')}</div></td>
+      <td class="quebra"><div class="produto-nome">${esc(i.nome)}${i.ativo ? '' : ' <span class="etiqueta tipo-saida">Desativado</span>'}</div><div class="produto-meta"><span class="codigo">${esc(i.codigo)}</span> ${[i.marca, i.categoria].filter(Boolean).map(esc).join(' · ')}</div></td>
       <td>${setorTag(i.setor)}</td><td>${esc(i.localizacao || '—')}</td>
       <td class="num">${medidor(i)}</td><td class="num">${moeda(i.preco_custo)}</td><td class="num"><strong>${moeda(i.preco_venda)}</strong></td>
       <td class="acoes-linha">
-        <button class="btn-icone" data-mov="${i.id}" title="Entrada / saída">${ic('movimentar')}</button>
+        ${i.ativo ? `<button class="btn-icone" data-mov="${i.id}" title="Entrada / saída">${ic('movimentar')}</button>` : ''}
         <button class="btn-icone" data-hist="${i.id}" title="Histórico">${ic('historico')}</button>
         <button class="btn-icone" data-edit="${i.id}" title="Editar">${ic('editar')}</button>
-        ${admin ? `<button class="btn-icone" data-del="${i.id}" title="Desativar">${ic('lixo')}</button>` : ''}
-      </td></tr>`).join('') || vazio('caixa', 'Nenhum produto encontrado.', 7);
+        ${admin && i.ativo ? `<button class="btn-icone" data-del="${i.id}" title="Desativar">${ic('lixo')}</button>` : ''}
+      </td></tr>`).join('') || (filtrando ? vazio('busca', 'Nenhum produto encontrado com esses filtros.', 7)
+      : `<tr><td colspan="7" class="vazio">${ic('caixa')}Nenhum produto cadastrado ainda.<br><button class="btn primario" id="vazio-novo" style="margin-top:14px">${ic('mais')}Cadastrar o primeiro produto</button></td></tr>`);
+    if ($('#vazio-novo')) $('#vazio-novo').onclick = () => formProduto(null, lista);
     const total = itens.reduce((s, i) => s + i.estoque * i.preco_custo, 0);
     $('#rodape-produtos').textContent = `${itens.length} produto(s) · valor a preço de custo: ${moeda(total)}`;
   };
   let t;
   $('#f-busca').oninput = () => { clearTimeout(t); t = setTimeout(tentar(lista), 250); };
-  ['#f-setor', '#f-cat', '#f-baixo'].forEach((s) => ($(s).onchange = tentar(lista)));
+  ['#f-setor', '#f-cat', '#f-baixo', '#f-inativos'].forEach((s) => ($(s).onchange = tentar(lista)));
   $('#novo-produto').onclick = () => formProduto(null, lista);
+  if (param === 'novo') { history.replaceState(null, '', '#produtos'); formProduto(null, lista); }
   $('#lista-produtos').onclick = tentar(async (ev) => {
     const b = ev.target.closest('button');
     if (!b) return;
@@ -299,7 +334,9 @@ telas.produtos = async (el, param) => {
 function formProduto(p, depois) {
   const v = (k) => esc(p?.[k] ?? '');
   const br = (k, casas) => (p?.[k] == null ? '' : Number(p[k]).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: 3, useGrouping: false }));
-  abrirModal(p ? 'Editar produto' : 'Novo produto', `<div class="form-grade">
+  const semCategorias = !cache.categorias.length
+    ? `<div class="dica">${ic('info')}<span>Você ainda não tem categorias. Dá para salvar o produto sem categoria e organizar depois em <a href="#categorias">Categorias</a>.</span></div>` : '';
+  abrirModal(p ? 'Editar produto' : 'Novo produto', `${semCategorias}<div class="form-grade">
     <label class="campo largo">Descrição *<input name="nome" required value="${v('nome')}" placeholder="Ex.: Disjuntor DIN bipolar 40A"></label>
     <label class="campo">Código interno *<input name="codigo" required value="${v('codigo')}" placeholder="ELE-012"></label>
     <label class="campo">Código de barras<input name="codigo_barras" value="${v('codigo_barras')}" placeholder="Bipe o leitor aqui"></label>
@@ -434,8 +471,8 @@ telas.movimentar = async (el, produtoId) => {
 
 // ---------- Histórico ----------
 telas.historico = async (el, produtoId) => {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const inicio = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const hoje = dataLocal();
+  const inicio = dataLocal(new Date(Date.now() - 30 * 864e5));
   const prod = produtoId ? await api('/produtos/' + produtoId) : null;
   el.innerHTML = cabecalho(prod ? esc(prod.nome) : 'Histórico', prod ? `Movimentações do produto <span class="codigo">${esc(prod.codigo)}</span>` : 'Tudo o que entrou e saiu, com data, usuário e documento.',
     prod ? `<a class="btn" href="#historico">Ver todos os produtos</a>` : '') + `
@@ -461,7 +498,9 @@ telas.historico = async (el, produtoId) => {
       <td class="num">${m.valor_unitario != null ? moeda(m.valor_unitario) : '—'}</td>
       <td>${esc(m.documento || '—')}</td><td class="quebra">${esc(m.motivo || '')}</td><td>${esc(m.usuario || '')}</td></tr>`).join('')
       || vazio('historico', 'Nenhuma movimentação no período.', 9);
-    $('#h-rodape').textContent = `${itens.length} movimentação(ões)`;
+    $('#h-rodape').textContent = itens.length >= 500
+      ? 'Mostrando as 500 movimentações mais recentes. Use as datas para ver períodos anteriores, ou baixe a planilha em Relatórios.'
+      : `${itens.length} movimentação(ões)`;
   };
   let t;
   if ($('#h-busca')) $('#h-busca').oninput = () => { clearTimeout(t); t = setTimeout(tentar(lista), 250); };
@@ -477,13 +516,21 @@ telas.categorias = async (el) => {
   <div class="cartao tabela-wrap"><table><thead><tr><th>Nome</th><th>Setor</th><th class="num">Produtos</th><th></th></tr></thead><tbody>
   ${itens.map((c) => `<tr><td class="produto-nome">${esc(c.nome)}</td><td>${setorTag(c.setor)}</td><td class="num">${c.produtos}</td>
     <td class="acoes-linha"><button class="btn-icone" data-edit="${c.id}" title="Editar">${ic('editar')}</button>
-    ${admin ? `<button class="btn-icone" data-del="${c.id}" title="Excluir">${ic('lixo')}</button>` : ''}</td></tr>`).join('') || vazio('etiqueta', 'Nenhuma categoria.', 4)}
+    ${admin ? `<button class="btn-icone" data-del="${c.id}" title="Excluir">${ic('lixo')}</button>` : ''}</td></tr>`).join('')
+    || `<tr><td colspan="4" class="vazio">${ic('etiqueta')}Nenhuma categoria ainda.<br>
+      <span style="display:block;max-width:520px;margin:6px auto 14px">Crie uma por uma, ou comece com 15 categorias prontas para elétrica, hidráulica e segurança eletrônica (dá para editar e excluir depois).</span>
+      <button class="btn primario" id="sugeridas">${ic('mais')}Criar categorias sugeridas</button></td></tr>`}
   </tbody></table></div>`;
   const form = (c) => abrirModal(c ? 'Editar categoria' : 'Nova categoria', `<div class="form-grade">
     <label class="campo">Nome *<input name="nome" required value="${esc(c?.nome || '')}"></label>
     <label class="campo">Setor<select name="setor">${Object.entries(SETORES).map(([k, v]) => `<option value="${k}" ${c?.setor === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>`,
   async (d) => { await api('/categorias' + (c ? '/' + c.id : ''), { method: c ? 'PUT' : 'POST', body: d }); aviso('Categoria salva.'); rotear(); });
   $('#nova').onclick = () => form(null);
+  if ($('#sugeridas')) $('#sugeridas').onclick = tentar(async () => {
+    const r = await api('/categorias/sugeridas', { method: 'POST' });
+    aviso(`${r.criadas} categorias criadas.`);
+    rotear();
+  });
   el.onclick = tentar(async (ev) => {
     const b = ev.target.closest('button');
     if (b?.dataset.edit) form(itens.find((c) => c.id == b.dataset.edit));
@@ -519,7 +566,7 @@ telas.fornecedores = async (el) => {
 
 // ---------- Relatórios ----------
 telas.relatorios = async (el) => {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = dataLocal();
   const inicioMes = hoje.slice(0, 8) + '01';
   el.innerHTML = cabecalho('Relatórios', 'Planilhas que abrem direto no Excel ou no Google Planilhas.') + `
   <div class="grade-3">
@@ -551,10 +598,35 @@ telas.relatorios = async (el) => {
 
 // ---------- Backup ----------
 telas.backup = async (el) => {
-  const { itens } = await api('/backups');
+  const { itens, extra } = await api('/backups');
+  const info = PRINCIPAL ? await window.desktop.info() : null;
   const ultimo = itens[0];
+  const nomeNuvem = (p) => (/google|meu drive|my drive/i.test(p) ? 'Google Drive' : /onedrive/i.test(p) ? 'OneDrive' : 'pasta extra');
+
+  let blocoNuvem;
+  if (extra.pasta) {
+    blocoNuvem = `<div class="cartao destaque-backup" style="margin-bottom:20px">
+      <div class="kpi-icone ${extra.erro ? 'tom-vermelho' : 'tom-azul'}">${ic(extra.erro ? 'alerta' : 'nuvem')}</div>
+      <div class="cresce"><h2>${extra.erro ? 'Problema na cópia para a nuvem' : `Cópia na nuvem ligada (${nomeNuvem(extra.pasta)})`}</h2>
+        <p class="suave" style="margin:4px 0 0">${extra.erro ? esc(extra.erro) : 'Cada backup também é copiado para'} <span class="codigo">${esc(extra.pasta)}</span>
+        ${extra.ultimaCopia ? `· última cópia ${dataBR(extra.ultimaCopia)}` : ''}</p></div>
+      ${PRINCIPAL ? `<div class="acoes"><button class="btn" id="b-abrir-extra">${ic('pasta')}Abrir</button><button class="btn perigo" id="b-remover-extra">Desligar</button></div>` : ''}
+    </div>`;
+  } else if (PRINCIPAL) {
+    const sug = info.sugestoesNuvem;
+    blocoNuvem = `<div class="cartao destaque-backup" style="margin-bottom:20px">
+      <div class="kpi-icone tom-laranja">${ic('nuvem')}</div>
+      <div class="cresce"><h2>Guarde os backups na nuvem, de graça</h2>
+        <p class="suave" style="margin:4px 0 0">${sug.length
+          ? 'Encontrei uma pasta de nuvem neste computador. Com um clique, cada backup também vai para lá e sobe sozinho para a internet.'
+          : 'Instale o <strong>Google Drive para computador</strong> (15 GB grátis) ou use o <strong>OneDrive</strong> do Windows, e escolha a pasta aqui. Cada backup também vai para lá e sobe sozinho para a internet. Também serve um pendrive.'}</p></div>
+      <div class="acoes">${sug.map((x, i) => `<button class="btn primario" data-sugestao="${i}">${ic('nuvem')}Usar ${esc(x.nome)}</button>`).join('')}
+        <button class="btn" id="b-escolher-extra">${ic('pasta')}${sug.length ? 'Outra pasta…' : 'Escolher pasta…'}</button></div>
+    </div>`;
+  } else blocoNuvem = '';
+
   el.innerHTML = cabecalho('Backup', 'Cópias de segurança de todos os dados do estoque.',
-    `${DESKTOP ? `<button class="btn" id="b-pasta">${ic('pasta')}Abrir pasta</button>` : ''}
+    `${PRINCIPAL ? `<button class="btn" id="b-pasta">${ic('pasta')}Abrir pasta</button>` : ''}
      <button class="btn primario" id="b-agora">${ic('backup')}Fazer backup agora</button>`) + `
   <div class="cartao destaque-backup" style="margin-bottom:20px">
     <div class="kpi-icone tom-verde">${ic('escudo')}</div>
@@ -562,20 +634,17 @@ telas.backup = async (el) => {
       <p class="suave" style="margin:4px 0 0">Todo dia o sistema guarda sozinho uma cópia dos dados e mantém os últimos 15 dias.
       ${ultimo ? `Último backup: <strong>${dataBR(ultimo.criado_em)}</strong>.` : ''}</p></div>
   </div>
-  <div class="grade-3" style="margin-bottom:20px">
-    ${DESKTOP ? `
+  ${blocoNuvem}
+  ${PRINCIPAL ? `<div class="grade-3" style="margin-bottom:20px">
     <div class="cartao cartao-corpo pilha" style="gap:14px">
       <div class="kpi-icone tom-azul">${ic('baixar')}</div>
-      <div><h2 style="font-size:1.05rem">Guardar fora do computador</h2><p class="suave" style="margin:4px 0 0">Salve uma cópia num pendrive ou numa pasta do Google Drive / OneDrive. Se o PC quebrar, os dados estão salvos.</p></div>
+      <div><h2 style="font-size:1.05rem">Salvar uma cópia agora</h2><p class="suave" style="margin:4px 0 0">Grava um backup onde você escolher, por exemplo num pendrive.</p></div>
       <button class="btn" id="b-salvar">${ic('baixar')}Salvar cópia em…</button></div>
     <div class="cartao cartao-corpo pilha" style="gap:14px">
       <div class="kpi-icone tom-laranja">${ic('restaurar')}</div>
-      <div><h2 style="font-size:1.05rem">Restaurar de um arquivo</h2><p class="suave" style="margin:4px 0 0">Use ao trocar de computador ou para voltar dados de um pendrive. O programa reinicia sozinho.</p></div>
-      <button class="btn" id="b-arquivo">${ic('enviar')}Escolher arquivo…</button></div>`
-    : `<div class="cartao cartao-corpo pilha" style="gap:14px">
-      <div class="kpi-icone tom-azul">${ic('baixar')}</div>
-      <div><h2 style="font-size:1.05rem">Guarde uma cópia com você</h2><p class="suave" style="margin:4px 0 0">Baixe os backups da lista abaixo e guarde no Google Drive ou num pendrive.</p></div></div>`}
-  </div>
+      <div><h2 style="font-size:1.05rem">Restaurar de um arquivo</h2><p class="suave" style="margin:4px 0 0">Para trocar de computador ou voltar dados do Google Drive ou de um pendrive. O programa reinicia sozinho.</p></div>
+      <button class="btn" id="b-arquivo">${ic('enviar')}Escolher arquivo…</button></div>
+  </div>` : ''}
   <div class="cartao">
     <div class="cartao-topo"><h2>Backups guardados</h2><span class="suave">${itens.length} arquivo(s)</span></div>
     <div class="tabela-wrap" style="margin-top:12px"><table>
@@ -583,25 +652,74 @@ telas.backup = async (el) => {
       ${itens.map((b) => `<tr><td><strong>${dataBR(b.criado_em)}</strong><div class="produto-meta">${esc(b.arquivo)}</div></td>
         <td><span class="etiqueta tipo-${b.tipo}">${b.tipo === 'manual' ? 'Manual' : 'Automático'}</span></td>
         <td class="num">${tamanho(b.tamanho)}</td>
-        <td class="acoes-linha" style="white-space:nowrap">
+        <td class="acoes-linha">
           <button class="btn-icone" data-baixar="${esc(b.arquivo)}" title="Baixar">${ic('baixar')}</button>
-          ${DESKTOP ? `<button class="btn" data-restaurar="${esc(b.arquivo)}" style="height:32px">${ic('restaurar')}Restaurar</button>` : ''}
+          ${PRINCIPAL ? `<button class="btn" data-restaurar="${esc(b.arquivo)}" style="height:32px">${ic('restaurar')}Restaurar</button>` : ''}
         </td></tr>`).join('') || vazio('backup', 'Nenhum backup ainda.', 4)}
       </tbody></table></div>
   </div>`;
 
-  const resultado = (r, msgOk) => { if (r?.ok) aviso(msgOk); };
+  const resultado = (r, msgOk) => { if (r?.ok) aviso(msgOk); return r?.ok; };
   $('#b-agora').onclick = tentar(async () => { await api('/backups', { method: 'POST' }); aviso('Backup feito com sucesso.'); rotear(); });
-  if (DESKTOP) {
-    $('#b-pasta').onclick = tentar(() => window.desktop.abrirPastaBackups(token));
-    $('#b-salvar').onclick = tentar(async () => resultado(await window.desktop.salvarBackupComo(token), 'Cópia salva com sucesso.'));
-    $('#b-arquivo').onclick = tentar(async () => resultado(await window.desktop.restaurarDeArquivo(token), 'Restaurando… o programa vai reiniciar.'));
+  if (PRINCIPAL) {
+    const d = window.desktop;
+    $('#b-pasta').onclick = tentar(() => d.abrirPastaBackups(token));
+    $('#b-salvar').onclick = tentar(async () => resultado(await d.salvarBackupComo(token), 'Cópia salva com sucesso.'));
+    $('#b-arquivo').onclick = tentar(async () => resultado(await d.restaurarDeArquivo(token), 'Restaurando… o programa vai reiniciar.'));
+    if ($('#b-escolher-extra')) $('#b-escolher-extra').onclick = tentar(async () => { if (resultado(await d.definirPastaExtra(token), 'Pronto! Os backups agora também vão para a nuvem.')) rotear(); });
+    if ($('#b-abrir-extra')) $('#b-abrir-extra').onclick = tentar(() => d.abrirPastaBackups(token, 'extra'));
+    if ($('#b-remover-extra')) $('#b-remover-extra').onclick = tentar(async () => {
+      if (!confirm('Parar de copiar os backups para a nuvem? Os arquivos que já estão lá continuam guardados.')) return;
+      await d.removerPastaExtra(token); aviso('Cópia para a nuvem desligada.'); rotear();
+    });
   }
   el.onclick = tentar(async (ev) => {
     const b = ev.target.closest('button');
     if (b?.dataset.baixar) await baixar('/backups/' + encodeURIComponent(b.dataset.baixar), b.dataset.baixar);
     if (b?.dataset.restaurar) resultado(await window.desktop.restaurarDaLista(token, b.dataset.restaurar), 'Restaurando… o programa vai reiniciar.');
+    if (b?.dataset.sugestao !== undefined) {
+      const caminho = info.sugestoesNuvem[Number(b.dataset.sugestao)].caminho;
+      if (resultado(await window.desktop.definirPastaExtra(token, caminho), 'Pronto! Os backups agora também vão para a nuvem.')) rotear();
+    }
   });
+};
+
+// ---------- Configurações (programa do PC) ----------
+telas.configuracoes = async (el) => {
+  const info = await window.desktop.info();
+  const enderecos = info.enderecosRede || [];
+  const lan = enderecos.filter((e) => !/Tailscale/.test(e.rede));
+  const ts = enderecos.filter((e) => /Tailscale/.test(e.rede));
+  const linhaEndereco = (e) => `<li><div class="cresce"><strong style="font-size:1.25rem;font-variant-numeric:tabular-nums">${esc(e.ip)}</strong><small>${esc(e.rede)}</small></div>
+    <span class="suave" style="font-size:13px">celular/navegador: http://${esc(e.ip)}:${info.porta}</span></li>`;
+  el.innerHTML = cabecalho('Configurações', 'Como este computador funciona e como conectar os outros.') + `
+  <div class="cartao destaque-backup" style="margin-bottom:20px">
+    <div class="kpi-icone ${PRINCIPAL ? 'tom-azul' : 'tom-roxo'}">${ic(PRINCIPAL ? 'backup' : 'rede')}</div>
+    <div class="cresce"><h2>${PRINCIPAL ? 'Este é o computador principal' : 'Conectado ao computador principal'}</h2>
+      <p class="suave" style="margin:4px 0 0">${PRINCIPAL
+        ? 'Os dados da loja ficam guardados aqui. Deixe este computador ligado enquanto os outros estiverem usando o sistema.'
+        : `Os dados ficam no computador principal, no endereço <span class="codigo">${esc(info.endereco)}</span>.`}</p></div>
+    <div class="acoes"><button class="btn" id="c-mudar">${ic('engrenagem')}Mudar</button></div>
+  </div>
+  ${PRINCIPAL ? `<div class="grade-2">
+    <div class="cartao">
+      <div class="cartao-topo"><h2>${ic('rede')} Endereço para os outros computadores</h2></div>
+      <p class="suave" style="padding:8px 20px 0;margin:0">Nos outros PCs da loja, instale o programa, escolha <strong>"Conectar ao computador principal"</strong> e digite:</p>
+      <ul class="lista">${lan.map(linhaEndereco).join('') || '<li class="suave">Este computador não está conectado a nenhuma rede.</li>'}</ul>
+      <div class="dica" style="margin:0 20px 20px">${ic('info')}<span>Na primeira vez, o Windows pode perguntar se o programa pode usar a rede. Clique em <strong>Permitir acesso</strong>, senão os outros computadores não conseguem conectar.</span></div>
+    </div>
+    <div class="cartao">
+      <div class="cartao-topo"><h2>${ic('nuvem')} Acessar de fora da loja (grátis)</h2></div>
+      ${ts.length ? `<p class="suave" style="padding:8px 20px 0;margin:0">O Tailscale está ligado. De qualquer lugar, use este endereço:</p><ul class="lista">${ts.map(linhaEndereco).join('')}</ul>`
+        : `<div class="cartao-corpo"><ol style="margin:0;padding-left:20px;display:grid;gap:8px">
+          <li>Crie uma conta grátis em <a href="https://tailscale.com/download" target="_blank" rel="noopener">tailscale.com</a> e instale o Tailscale <strong>neste computador</strong>.</li>
+          <li>Instale também no seu celular ou notebook, entrando com a <strong>mesma conta</strong>.</li>
+          <li>Volte nesta tela: vai aparecer um endereço começando com <span class="codigo">100.</span> para usar de qualquer lugar.</li></ol>
+          <p class="suave" style="margin:12px 0 0;font-size:13px">A conexão é privada e criptografada: o sistema não fica aberto para a internet.</p></div>`}
+    </div>
+  </div>` : ''}
+  <p class="suave" style="margin-top:20px;font-size:13px">Controle de Estoque · versão ${esc(info.versao)}</p>`;
+  $('#c-mudar').onclick = tentar(() => window.desktop.reconfigurar());
 };
 
 // ---------- Usuários ----------
@@ -632,7 +750,7 @@ const iniciais = (nome) => String(nome || '?').split(/\s+/).filter(Boolean).slic
 
 async function rotear() {
   const [nome, param] = (location.hash.slice(1) || 'painel').split('/');
-  const item = MENU.find((m) => m.id === nome && (!m.admin || usuario?.perfil === 'admin'));
+  const item = MENU.find((m) => m.id === nome && (!m.admin || usuario?.perfil === 'admin') && (!m.desktop || DESKTOP));
   const id = item ? nome : 'painel';
   $$('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.id === id));
   abrirLateral(false);
@@ -642,8 +760,35 @@ async function rotear() {
   try { await telas[id](el, param); } catch (e) { el.innerHTML = cabecalho('Ops…', esc(e.message)); }
 }
 
+async function mostrarLogin() {
+  $('#app').hidden = true;
+  $('#tela-login').hidden = false;
+  let primeiro = false;
+  try { primeiro = (await api('/status')).precisaConfigurar; } catch { /* sem conexão: mostra o login */ }
+  $('#form-login').hidden = primeiro;
+  $('#form-primeiro').hidden = !primeiro;
+  $(primeiro ? '#form-primeiro [name=nome]' : '#form-login [name=email]').focus();
+}
+
+async function primeiroAcesso(ev) {
+  ev.preventDefault();
+  const f = Object.fromEntries(new FormData(ev.target));
+  if (f.senha !== f.senha2) { $('#erro-primeiro').textContent = 'As senhas não são iguais.'; return; }
+  const botao = $('button[type=submit]', ev.target);
+  botao.disabled = true;
+  try {
+    const r = await api('/primeiro-acesso', { method: 'POST', body: f });
+    token = r.token;
+    localStorage.setItem('token', token);
+    ev.target.reset();
+    $('#erro-primeiro').textContent = '';
+    location.hash = 'painel';
+    await iniciar();
+  } catch (e) { $('#erro-primeiro').textContent = e.message; } finally { botao.disabled = false; }
+}
+
 async function iniciar() {
-  if (!token) { $('#tela-login').hidden = false; $('#app').hidden = true; $('[name=email]').focus(); return; }
+  if (!token) return mostrarLogin();
   try { usuario = await api('/me'); } catch { return; }
   $('#tela-login').hidden = true;
   $('#app').hidden = false;
@@ -659,6 +804,7 @@ $('#btn-senha').innerHTML = ic('chave');
 $('#btn-sair').innerHTML = ic('sair');
 $('#btn-menu').innerHTML = ic('menu');
 $('#form-login').onsubmit = entrar;
+$('#form-primeiro').onsubmit = primeiroAcesso;
 $('#btn-sair').onclick = () => sair();
 $('#btn-senha').onclick = trocarSenha;
 $('#btn-menu').onclick = () => abrirLateral(true);

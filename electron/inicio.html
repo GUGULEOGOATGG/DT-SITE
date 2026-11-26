@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controle de Estoque</title>
+  <link rel="stylesheet" href="../public/style.css">
+  <style>
+    body { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px;
+      background: radial-gradient(1200px 600px at 10% 0%, #1e3a8a 0%, transparent 60%),
+                  radial-gradient(800px 500px at 100% 100%, #4c1d95 0%, transparent 55%), #0b1220; }
+    .caixa { width: 100%; max-width: 880px; }
+    .titulo { text-align: center; color: #fff; margin-bottom: 28px; }
+    .titulo img { width: 64px; height: 64px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .titulo h1 { font-size: 1.9rem; margin: 18px 0 6px; }
+    .titulo p { color: #b9c4d8; margin: 0; font-size: 1.05rem; }
+    .opcoes { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+    .opcao { display: flex; flex-direction: column; gap: 14px; padding: 26px; }
+    .opcao h2 { font-size: 1.15rem; }
+    .opcao p { margin: 0; color: var(--suave); }
+    .opcao ul { margin: 0; padding-left: 18px; color: var(--suave); font-size: 13.5px; display: grid; gap: 4px; }
+    .opcao .btn { margin-top: auto; }
+    .alerta-erro { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; margin-bottom: 18px; border-radius: 14px; background: var(--perigo-fraca); color: var(--texto); border: 1px solid color-mix(in srgb, var(--perigo) 30%, transparent); }
+    .alerta-erro svg { color: var(--perigo); flex: none; margin-top: 2px; }
+    .alerta-erro .btn { margin-top: 10px; }
+    .msg { min-height: 1.3em; margin: 0; font-size: 13.5px; }
+    .msg.erro { color: var(--perigo); }
+    .msg.ok { color: var(--ok); }
+    .rodape { text-align: center; color: #7d8aa3; font-size: 12.5px; margin-top: 20px; }
+    @media (max-width: 760px) { .opcoes { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="caixa">
+    <div class="titulo">
+      <img src="../public/icon.png" alt="">
+      <h1>Bem-vindo ao Controle de Estoque</h1>
+      <p>Como este computador vai funcionar?</p>
+    </div>
+
+    <div id="erro" class="alerta-erro" hidden>
+      <svg class="i" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <div><strong>Sem conexão</strong><div id="erro-texto"></div>
+        <button class="btn primario" id="tentar">Tentar de novo</button></div>
+    </div>
+
+    <div class="opcoes">
+      <div class="cartao opcao">
+        <div class="kpi-icone tom-azul"><svg class="i" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div>
+        <h2>Computador principal</h2>
+        <p>Este computador <strong>guarda os dados da loja</strong>.</p>
+        <ul>
+          <li>Se a loja tem só um computador, escolha esta opção.</li>
+          <li>Com vários computadores, use no que fica sempre ligado (caixa ou escritório).</li>
+          <li>Os outros PCs e celulares da rede se conectam a ele.</li>
+        </ul>
+        <button class="btn primario grande" id="principal">Usar como computador principal</button>
+      </div>
+      <div class="cartao opcao">
+        <div class="kpi-icone tom-roxo"><svg class="i" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></svg></div>
+        <h2>Conectar ao computador principal</h2>
+        <p>Para os <strong>outros computadores</strong> da loja. Tudo fica salvo no principal.</p>
+        <label class="campo">Endereço do computador principal
+          <input id="endereco" placeholder="Ex.: 192.168.0.10" autocomplete="off"></label>
+        <p class="suave" style="font-size:13px">O endereço aparece no computador principal, em <strong>Configurações</strong>.</p>
+        <p id="msg" class="msg"></p>
+        <button class="btn grande" id="conectar">Testar e conectar</button>
+      </div>
+    </div>
+    <p class="rodape" id="versao"></p>
+  </div>
+
+  <script>
+    const d = window.desktop;
+    const $ = (s) => document.querySelector(s);
+    d.info().then((info) => {
+      $('#versao').textContent = `Versão ${info.versao}`;
+      if (info.erroConexao) {
+        $('#erro').hidden = false;
+        $('#erro-texto').textContent = info.erroConexao;
+      }
+      if (info.endereco) $('#endereco').value = info.endereco.replace(/:47821$/, '');
+    });
+    $('#tentar').onclick = () => d.tentarNovamente();
+    $('#principal').onclick = async () => {
+      $('#principal').disabled = true;
+      await d.escolherModo('principal');
+    };
+    async function conectar() {
+      const msg = $('#msg');
+      const botao = $('#conectar');
+      if (!$('#endereco').value.trim()) { msg.className = 'msg erro'; msg.textContent = 'Digite o endereço do computador principal.'; return; }
+      botao.disabled = true;
+      msg.className = 'msg'; msg.textContent = 'Procurando o computador principal…';
+      const r = await d.testarConexao($('#endereco').value);
+      if (!r.ok) { msg.className = 'msg erro'; msg.textContent = r.erro; botao.disabled = false; return; }
+      msg.className = 'msg ok'; msg.textContent = 'Encontrado! Conectando…';
+      await d.escolherModo('cliente', r.endereco);
+    }
+    $('#conectar').onclick = conectar;
+    $('#endereco').onkeydown = (e) => { if (e.key === 'Enter') conectar(); };
+  </script>
+</body>
+</html>

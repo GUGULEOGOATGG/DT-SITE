@@ -6,6 +6,9 @@ const fs = require('node:fs');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'estoque-teste-'));
 process.env.DB_PATH = path.join(dir, 'teste.db');
+process.env.DADOS_EXEMPLO = '1';
+process.env.ADMIN_EMAIL = 'admin@loja.com';
+process.env.ADMIN_SENHA = 'admin123';
 const app = require('../src/server');
 
 let srv, base, token;

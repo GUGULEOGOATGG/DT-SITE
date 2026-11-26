@@ -277,6 +277,16 @@ td.acoes-linha { text-align: right; width: 1%; }
 .dica svg.i { color: var(--primaria); margin-top: 1px; }
 .acoes { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 
+/* Primeiros passos */
+.passos li { padding: 18px 20px; }
+.passo-num { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; background: var(--primaria-fraca); color: var(--primaria); }
+.passos li.feito .passo-num { background: var(--ok-fraca); color: var(--ok); }
+.passos li.feito strong { color: var(--suave); }
+.passos .cresce strong { white-space: normal; }
+.passos .cresce > small { display: block; margin-top: 2px; }
+.passos .cresce strong small { font-weight: 500; }
+.vazio .btn svg.i { display: inline; width: 18px; height: 18px; margin: 0; opacity: 1; }
+
 /* ============ Backup ============ */
 .destaque-backup { display: flex; align-items: center; gap: 18px; padding: 22px; flex-wrap: wrap; }
 .destaque-backup .kpi-icone { width: 56px; height: 56px; border-radius: 16px; }
@@ -313,5 +323,8 @@ dialog::backdrop { background: rgba(8, 12, 22, .55); backdrop-filter: blur(3px);
   .topo-movel { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--superficie); border-bottom: 1px solid var(--borda); position: sticky; top: 0; z-index: 5; }
   main { padding: 20px 16px 40px; }
   .segmentado { display: flex; }
+  .passos li { flex-wrap: wrap; }
+  .passos li .cresce { flex-basis: calc(100% - 50px); }
+  .passos li > .btn, .passos li > .etiqueta { margin-left: 46px; }
   .segmentado button { flex: 1; justify-content: center; padding: 0 8px; }
 }

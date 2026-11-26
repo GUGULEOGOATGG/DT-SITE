@@ -1,4 +1,6 @@
 // Backups do banco: automático (1 por dia) e manual, com limpeza dos antigos.
+// Opcionalmente copia cada backup para uma "pasta extra" — por exemplo a pasta do
+// Google Drive ou do OneDrive no computador, que sobe sozinha para a nuvem (grátis).
 // Funciona igual no programa desktop e no servidor/nuvem.
 const path = require('node:path');
 const fs = require('node:fs');
@@ -8,8 +10,12 @@ const BACKUP_DIR = process.env.BACKUP_DIR || path.join(path.dirname(DB_PATH), 'b
 const MANTER_AUTO = Number(process.env.BACKUP_MANTER) || 15;
 const MANTER_MANUAL = 30;
 const NOME_VALIDO = /^estoque-[\w-]+\.db$/;
+const NOME_AUTO = /^estoque-\d{4}-\d{2}-\d{2}\.db$/;
 
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+let pastaExtra = process.env.BACKUP_DIR_EXTRA || null;
+const estadoExtra = { ultimaCopia: null, erro: null };
 
 const doisDig = (n) => String(n).padStart(2, '0');
 function hojeLocal(d = new Date()) {
@@ -21,22 +27,40 @@ function gravar(destino) {
   db.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
 }
 
-function limpar() {
-  const todos = fs.readdirSync(BACKUP_DIR).filter((f) => NOME_VALIDO.test(f)).sort().reverse();
-  const auto = todos.filter((f) => /^estoque-\d{4}-\d{2}-\d{2}\.db$/.test(f)).slice(MANTER_AUTO);
+function limparPasta(pasta) {
+  const todos = fs.readdirSync(pasta).filter((f) => NOME_VALIDO.test(f)).sort().reverse();
+  const auto = todos.filter((f) => NOME_AUTO.test(f)).slice(MANTER_AUTO);
   const manual = todos.filter((f) => f.startsWith('estoque-manual-')).slice(MANTER_MANUAL);
-  for (const f of [...auto, ...manual]) fs.rmSync(path.join(BACKUP_DIR, f), { force: true });
+  for (const f of [...auto, ...manual]) fs.rmSync(path.join(pasta, f), { force: true });
 }
 
-/** Backup automático do dia (não duplica se já existir). */
+/** Copia um backup já feito para a pasta extra (Google Drive / OneDrive / pendrive). */
+function copiarParaExtra(nome) {
+  if (!pastaExtra) return;
+  try {
+    fs.mkdirSync(pastaExtra, { recursive: true });
+    fs.copyFileSync(path.join(BACKUP_DIR, nome), path.join(pastaExtra, nome));
+    limparPasta(pastaExtra);
+    estadoExtra.ultimaCopia = new Date().toISOString();
+    estadoExtra.erro = null;
+  } catch (e) {
+    estadoExtra.erro = `Não foi possível copiar para a pasta extra: ${e.message}`;
+    console.error(estadoExtra.erro);
+  }
+}
+
+/** Backup automático do dia (não duplica). Garante também a cópia na pasta extra. */
 function backupDiario() {
-  const destino = path.join(BACKUP_DIR, `estoque-${hojeLocal()}.db`);
+  const nome = `estoque-${hojeLocal()}.db`;
+  const destino = path.join(BACKUP_DIR, nome);
+  let criado = null;
   if (!fs.existsSync(destino)) {
     gravar(destino);
-    limpar();
-    return path.basename(destino);
+    limparPasta(BACKUP_DIR);
+    criado = nome;
   }
-  return null;
+  if (pastaExtra && (criado || !fs.existsSync(path.join(pastaExtra, nome)))) copiarParaExtra(nome);
+  return criado;
 }
 
 /** Backup feito na hora, pelo usuário. */
@@ -44,7 +68,8 @@ function backupManual() {
   const d = new Date();
   const nome = `estoque-manual-${hojeLocal(d)}-${doisDig(d.getHours())}${doisDig(d.getMinutes())}${doisDig(d.getSeconds())}.db`;
   gravar(path.join(BACKUP_DIR, nome));
-  limpar();
+  limparPasta(BACKUP_DIR);
+  copiarParaExtra(nome);
   return nome;
 }
 
@@ -65,6 +90,22 @@ function caminhoDe(arquivo) {
   return fs.existsSync(p) ? p : null;
 }
 
+/** Define (ou remove, com null) a pasta extra e já faz a primeira cópia. */
+function definirPastaExtra(pasta) {
+  pastaExtra = pasta || null;
+  estadoExtra.erro = null;
+  estadoExtra.ultimaCopia = null;
+  if (pastaExtra) {
+    try { backupDiario(); } catch (e) { estadoExtra.erro = e.message; }
+    const hoje = `estoque-${hojeLocal()}.db`;
+    if (fs.existsSync(path.join(BACKUP_DIR, hoje))) copiarParaExtra(hoje);
+  }
+}
+
+function infoExtra() {
+  return { pasta: pastaExtra, ...estadoExtra };
+}
+
 let agendado = false;
 /** Faz o backup do dia agora e confere de hora em hora (cobre o programa aberto por vários dias). */
 function iniciarAgendamento() {
@@ -75,4 +116,4 @@ function iniciarAgendamento() {
   setInterval(rodar, 60 * 60 * 1000).unref();
 }
 
-module.exports = { BACKUP_DIR, backupDiario, backupManual, listar, caminhoDe, gravar, iniciarAgendamento };
+module.exports = { BACKUP_DIR, backupDiario, backupManual, listar, caminhoDe, gravar, iniciarAgendamento, definirPastaExtra, infoExtra };

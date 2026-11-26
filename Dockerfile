@@ -4,7 +4,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 COPY public ./public
-ENV NODE_ENV=production DB_PATH=/data/estoque.db PORT=3000
+RUN apk add --no-cache tzdata
+ENV NODE_ENV=production DB_PATH=/data/estoque.db PORT=3000 TZ=America/Sao_Paulo
 VOLUME ["/data"]
 EXPOSE 3000
 CMD ["npm", "start"]

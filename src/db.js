@@ -84,6 +84,12 @@ CREATE INDEX IF NOT EXISTS idx_mov_produto ON movimentacoes(produto_id);
 CREATE INDEX IF NOT EXISTS idx_mov_data ON movimentacoes(criado_em);
 `);
 
+try {
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_produtos_barras ON produtos(codigo_barras) WHERE codigo_barras IS NOT NULL AND codigo_barras <> ''");
+} catch (e) {
+  console.warn('Há códigos de barras repetidos no banco; o aviso de duplicidade fica desligado.', e.message);
+}
+
 // ---------- Senhas ----------
 function hashSenha(senha) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -117,35 +123,43 @@ function transacao(fn) {
   }
 }
 
+// ---------- Categorias sugeridas (opcional, criadas só quando o usuário pede) ----------
+const CATEGORIAS_SUGERIDAS = [
+  ['Fios e Cabos', 'eletrica'], ['Disjuntores e Quadros', 'eletrica'],
+  ['Tomadas e Interruptores', 'eletrica'], ['Iluminação', 'eletrica'],
+  ['Eletrodutos e Conexões', 'eletrica'],
+  ['Tubos PVC', 'hidraulica'], ['Conexões Hidráulicas', 'hidraulica'],
+  ['Registros e Válvulas', 'hidraulica'], ["Caixas d'Água", 'hidraulica'],
+  ['Metais Sanitários', 'hidraulica'],
+  ['Câmeras CFTV', 'seguranca'], ['DVR / NVR', 'seguranca'],
+  ['Alarmes e Sensores', 'seguranca'], ['Controle de Acesso', 'seguranca'],
+  ['Cercas Elétricas', 'seguranca'],
+];
+function criarCategoriasSugeridas() {
+  const ins = db.prepare('INSERT OR IGNORE INTO categorias (nome, setor) VALUES (?, ?)');
+  let criadas = 0;
+  for (const [nome, setor] of CATEGORIAS_SUGERIDAS) criadas += ins.run(nome, setor).changes;
+  return criadas;
+}
+
 // ---------- Dados iniciais ----------
 function popularSeVazio() {
+  // Sem nenhum usuário, o sistema pede para criar a conta de administrador na primeira abertura.
+  // Em servidores na nuvem, dá para criar direto pelas variáveis ADMIN_EMAIL e ADMIN_SENHA.
   const temUsuario = db.prepare('SELECT COUNT(*) n FROM usuarios').get().n > 0;
-  if (!temUsuario) {
-    const email = process.env.ADMIN_EMAIL || 'admin@loja.com';
-    const senha = process.env.ADMIN_SENHA || 'admin123';
+  if (!temUsuario && process.env.ADMIN_EMAIL && process.env.ADMIN_SENHA) {
     db.prepare('INSERT INTO usuarios (nome,email,senha_hash,perfil) VALUES (?,?,?,?)')
-      .run('Administrador', email, hashSenha(senha), 'admin');
-    console.log(`Usuário administrador criado: ${email} (troque a senha após o primeiro acesso)`);
+      .run(process.env.ADMIN_NOME || 'Administrador', process.env.ADMIN_EMAIL, hashSenha(process.env.ADMIN_SENHA), 'admin');
+    console.log(`Usuário administrador criado: ${process.env.ADMIN_EMAIL}`);
   }
 
+  // Dados de demonstração só quando pedido explicitamente (DADOS_EXEMPLO=1)
   const temCategoria = db.prepare('SELECT COUNT(*) n FROM categorias').get().n > 0;
-  if (temCategoria || process.env.SEM_DADOS_EXEMPLO === '1') return;
+  if (temCategoria || process.env.DADOS_EXEMPLO !== '1') return;
 
   transacao(() => {
-    const cat = db.prepare('INSERT INTO categorias (nome,setor) VALUES (?,?)');
-    const cats = [
-      ['Fios e Cabos', 'eletrica'], ['Disjuntores e Quadros', 'eletrica'],
-      ['Tomadas e Interruptores', 'eletrica'], ['Iluminação', 'eletrica'],
-      ['Eletrodutos e Conexões', 'eletrica'],
-      ['Tubos PVC', 'hidraulica'], ['Conexões Hidráulicas', 'hidraulica'],
-      ['Registros e Válvulas', 'hidraulica'], ['Caixas d\'Água', 'hidraulica'],
-      ['Metais Sanitários', 'hidraulica'],
-      ['Câmeras CFTV', 'seguranca'], ['DVR / NVR', 'seguranca'],
-      ['Alarmes e Sensores', 'seguranca'], ['Controle de Acesso', 'seguranca'],
-      ['Cercas Elétricas', 'seguranca'],
-    ];
-    const idCat = {};
-    for (const [nome, setor] of cats) idCat[nome] = Number(cat.run(nome, setor).lastInsertRowid);
+    criarCategoriasSugeridas();
+    const idCat = Object.fromEntries(db.prepare('SELECT nome, id FROM categorias').all().map((c) => [c.nome, c.id]));
 
     const forn = db.prepare('INSERT INTO fornecedores (nome,cnpj,telefone,email,contato) VALUES (?,?,?,?,?)');
     const f1 = Number(forn.run('Distribuidora Elétrica Central', '11.111.111/0001-11', '(11) 3333-1111', 'vendas@eletricacentral.com.br', 'Carlos').lastInsertRowid);
@@ -190,9 +204,9 @@ function popularSeVazio() {
 
     // Movimentação de "saldo inicial" para cada produto, garantindo histórico consistente
     db.prepare(`INSERT INTO movimentacoes (produto_id,tipo,quantidade,estoque_antes,estoque_depois,valor_unitario,motivo,usuario_id)
-      SELECT id,'entrada',estoque,0,estoque,preco_custo,'Saldo inicial',1 FROM produtos`).run();
+      SELECT id,'entrada',estoque,0,estoque,preco_custo,'Saldo inicial',(SELECT MIN(id) FROM usuarios) FROM produtos`).run();
   });
-  console.log('Dados de exemplo inseridos (defina SEM_DADOS_EXEMPLO=1 para não inserir).');
+  console.log('Dados de demonstração inseridos (DADOS_EXEMPLO=1).');
 }
 
-module.exports = { db, transacao, hashSenha, conferirSenha, popularSeVazio, DB_PATH };
+module.exports = { db, transacao, hashSenha, conferirSenha, popularSeVazio, criarCategoriasSugeridas, DB_PATH };

@@ -1,7 +1,8 @@
 const express = require('express');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { db, transacao, hashSenha, conferirSenha, popularSeVazio, DB_PATH } = require('./db');
+const { db, transacao, hashSenha, conferirSenha, popularSeVazio, criarCategoriasSugeridas, DB_PATH } = require('./db');
+const { version: VERSAO } = require('../package.json');
 
 const backup = require('./backup');
 
@@ -9,6 +10,15 @@ popularSeVazio();
 backup.iniciarAgendamento();
 
 const app = express();
+app.disable('x-powered-by');
+// Atrás de um proxy (Render, Railway, Caddy), use TRUST_PROXY=1 para o bloqueio de login ver o IP real
+if (process.env.TRUST_PROXY === '1') app.set('trust proxy', true);
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -24,7 +34,10 @@ const num = (v, campo, { min = 0, obrigatorio = false } = {}) => {
     if (obrigatorio) throw new ErroHttp(400, `Informe ${campo}.`);
     return null;
   }
-  const n = Number(String(v).replace(',', '.'));
+  // Aceita "1.234,56", "1234,56" e "1234.56"
+  let t = String(v).trim().replace(/^R\$\s*/i, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = t === '' ? NaN : Number(t);
   if (!Number.isFinite(n) || n < min) throw new ErroHttp(400, `Valor inválido para ${campo}.`);
   return n;
 };
@@ -42,14 +55,76 @@ const id = (v) => {
 // ---------- Autenticação ----------
 const HORAS_SESSAO = 12;
 
-app.post('/api/login', rota((req) => {
-  const { email, senha } = req.body || {};
-  const u = db.prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1').get(String(email || ''));
-  if (!u || !conferirSenha(String(senha || ''), u.senha_hash)) throw new ErroHttp(401, 'E-mail ou senha incorretos.');
+function novaSessao(u) {
   db.prepare("DELETE FROM sessoes WHERE expira_em < datetime('now')").run();
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare(`INSERT INTO sessoes (token, usuario_id, expira_em) VALUES (?, ?, datetime('now', '+${HORAS_SESSAO} hours'))`).run(token, u.id);
   return { token, usuario: { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil } };
+}
+const validarSenha = (senha) => {
+  if (String(senha || '').length < 6) throw new ErroHttp(400, 'A senha precisa ter pelo menos 6 caracteres.');
+  return String(senha);
+};
+const validarEmail = (email) => {
+  const e = txt(email, 'o e-mail', true);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new ErroHttp(400, 'E-mail inválido.');
+  return e;
+};
+
+// Bloqueio contra adivinhação de senha (15 minutos):
+// - 5 erros no mesmo e-mail a partir do mesmo endereço (não trava os colegas da loja)
+// - 20 erros no total a partir do mesmo endereço (quem tenta vários e-mails)
+const BLOQUEIO_MS = 15 * 60 * 1000;
+const tentativas = new Map();
+function conferirBloqueio(chave) {
+  const t = tentativas.get(chave);
+  if (t && t.bloqueadoAte > Date.now()) {
+    const min = Math.ceil((t.bloqueadoAte - Date.now()) / 60000);
+    throw new ErroHttp(429, `Muitas tentativas erradas. Tente de novo em ${min} minuto(s).`);
+  }
+}
+function registrarErro(chave, limite) {
+  const agora = Date.now();
+  let t = tentativas.get(chave);
+  if (!t || agora - t.inicio > BLOQUEIO_MS) t = { erros: 0, inicio: agora, bloqueadoAte: 0 };
+  t.erros += 1;
+  if (t.erros >= limite) { t.bloqueadoAte = agora + BLOQUEIO_MS; t.erros = 0; t.inicio = agora; }
+  tentativas.set(chave, t);
+  if (tentativas.size > 10000) for (const [k, v] of tentativas) if (v.bloqueadoAte < agora && agora - v.inicio > BLOQUEIO_MS) tentativas.delete(k);
+}
+
+const semUsuarios = () => db.prepare('SELECT COUNT(*) n FROM usuarios').get().n === 0;
+
+// Informações públicas para a tela inicial
+app.get('/api/status', rota(() => ({ precisaConfigurar: semUsuarios(), versao: VERSAO })));
+
+// Primeira abertura: cria a conta de administrador (só funciona enquanto não existe nenhum usuário)
+app.post('/api/primeiro-acesso', rota((req) => {
+  const b = req.body || {};
+  const nome = txt(b.nome, 'seu nome', true);
+  const email = validarEmail(b.email);
+  const senha = validarSenha(b.senha);
+  return transacao(() => {
+    if (!semUsuarios()) throw new ErroHttp(403, 'O sistema já foi configurado. Faça login.');
+    const r = db.prepare("INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?, ?, ?, 'admin')").run(nome, email, hashSenha(senha));
+    return novaSessao({ id: Number(r.lastInsertRowid), nome, email, perfil: 'admin' });
+  });
+}));
+
+app.post('/api/login', rota((req) => {
+  const { email, senha } = req.body || {};
+  const ip = req.ip || 'local';
+  const chave = `${ip}|${String(email || '').trim().toLowerCase()}`;
+  conferirBloqueio(chave);
+  conferirBloqueio(ip);
+  const u = db.prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1').get(String(email || '').trim());
+  if (!u || !conferirSenha(String(senha || ''), u.senha_hash)) {
+    registrarErro(chave, 5);
+    registrarErro(ip, 20);
+    throw new ErroHttp(401, 'E-mail ou senha incorretos.');
+  }
+  tentativas.delete(chave);
+  return novaSessao(u);
 }));
 
 function autenticar(req, _res, next) {
@@ -76,8 +151,7 @@ app.put('/api/me/senha', rota((req) => {
   const { atual, nova } = req.body || {};
   const u = db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(req.usuario.id);
   if (!conferirSenha(String(atual || ''), u.senha_hash)) throw new ErroHttp(400, 'Senha atual incorreta.');
-  if (String(nova || '').length < 6) throw new ErroHttp(400, 'A nova senha precisa ter pelo menos 6 caracteres.');
-  db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hashSenha(nova), req.usuario.id);
+  db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hashSenha(validarSenha(nova)), req.usuario.id);
   db.prepare('DELETE FROM sessoes WHERE usuario_id = ? AND token <> ?').run(req.usuario.id, req.token);
   return { ok: true };
 }));
@@ -88,11 +162,10 @@ app.get('/api/usuarios', somenteAdmin, rota(() =>
 
 app.post('/api/usuarios', somenteAdmin, rota((req) => {
   const b = req.body || {};
-  const senha = String(b.senha || '');
-  if (senha.length < 6) throw new ErroHttp(400, 'A senha precisa ter pelo menos 6 caracteres.');
+  const senha = validarSenha(b.senha);
   const perfil = b.perfil === 'admin' ? 'admin' : 'operador';
   const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)')
-    .run(txt(b.nome, 'o nome', true), txt(b.email, 'o e-mail', true), hashSenha(senha), perfil);
+    .run(txt(b.nome, 'o nome', true), validarEmail(b.email), hashSenha(senha), perfil);
   return { id: Number(r.lastInsertRowid) };
 }));
 
@@ -103,11 +176,8 @@ app.put('/api/usuarios/:id', somenteAdmin, rota((req) => {
   const ativo = b.ativo === false || b.ativo === 0 ? 0 : 1;
   if (uid === req.usuario.id && (ativo === 0 || perfil !== 'admin')) throw new ErroHttp(400, 'Você não pode remover seu próprio acesso de administrador.');
   db.prepare('UPDATE usuarios SET nome = ?, email = ?, perfil = ?, ativo = ? WHERE id = ?')
-    .run(txt(b.nome, 'o nome', true), txt(b.email, 'o e-mail', true), perfil, ativo, uid);
-  if (b.senha) {
-    if (String(b.senha).length < 6) throw new ErroHttp(400, 'A senha precisa ter pelo menos 6 caracteres.');
-    db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hashSenha(b.senha), uid);
-  }
+    .run(txt(b.nome, 'o nome', true), validarEmail(b.email), perfil, ativo, uid);
+  if (b.senha) db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hashSenha(validarSenha(b.senha)), uid);
   if (!ativo) db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(uid);
   return { ok: true };
 }));
@@ -153,6 +223,7 @@ app.post('/api/categorias', rota((req) => {
   const r = db.prepare('INSERT INTO categorias (nome, setor) VALUES (?, ?)').run(txt(req.body.nome, 'o nome', true), setorValido(req.body.setor));
   return { id: Number(r.lastInsertRowid) };
 }));
+app.post('/api/categorias/sugeridas', rota(() => ({ criadas: criarCategoriasSugeridas() })));
 app.put('/api/categorias/:id', rota((req) => {
   db.prepare('UPDATE categorias SET nome = ?, setor = ? WHERE id = ?').run(txt(req.body.nome, 'o nome', true), setorValido(req.body.setor), id(req.params.id));
   return { ok: true };
@@ -328,7 +399,9 @@ app.get('/api/movimentacoes', rota((req) => {
 function enviarCsv(res, nome, linhas, colunas) {
   const esc = (v) => {
     if (v === null || v === undefined) return '';
-    const s = typeof v === 'number' ? String(v).replace('.', ',') : String(v);
+    let s = typeof v === 'number' ? String(v).replace('.', ',') : String(v);
+    // Texto começando com = + - @ viraria fórmula no Excel: força como texto
+    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const corpo = [colunas.map((c) => c[1]).join(';'), ...linhas.map((l) => colunas.map((c) => esc(l[c[0]])).join(';'))].join('\r\n');
@@ -371,7 +444,7 @@ app.get('/api/relatorios/movimentacoes.csv', (req, res, next) => {
 });
 
 // ---------- Backups (admin) ----------
-app.get('/api/backups', somenteAdmin, rota(() => ({ pasta: backup.BACKUP_DIR, itens: backup.listar() })));
+app.get('/api/backups', somenteAdmin, rota(() => ({ pasta: backup.BACKUP_DIR, extra: backup.infoExtra(), itens: backup.listar() })));
 app.post('/api/backups', somenteAdmin, rota(() => ({ arquivo: backup.backupManual() })));
 app.get('/api/backups/:arquivo', somenteAdmin, (req, res, next) => {
   const p = backup.caminhoDe(req.params.arquivo);
@@ -384,9 +457,11 @@ app.use('/api', (_req, _res, next) => next(new ErroHttp(404, 'Rota não encontra
 app.use((err, _req, res, _next) => {
   let status = err.status || 500;
   let msg = err.message;
-  if (/UNIQUE constraint failed: produtos\.codigo/.test(msg)) { status = 409; msg = 'Já existe um produto com esse código.'; }
+  if (/UNIQUE constraint failed: produtos\.codigo_barras/.test(msg)) { status = 409; msg = 'Esse código de barras já está em outro produto.'; }
+  else if (/UNIQUE constraint failed: produtos\.codigo/.test(msg)) { status = 409; msg = 'Já existe um produto com esse código.'; }
   else if (/UNIQUE constraint failed: usuarios\.email/.test(msg)) { status = 409; msg = 'Já existe um usuário com esse e-mail.'; }
   else if (/UNIQUE constraint failed: categorias\.nome/.test(msg)) { status = 409; msg = 'Já existe uma categoria com esse nome.'; }
+  else if (err.type === 'entity.parse.failed') { status = 400; msg = 'Dados enviados em formato inválido.'; }
   else if (/FOREIGN KEY constraint failed/.test(msg)) { status = 400; msg = 'Registro relacionado inválido.'; }
   else if (/CHECK constraint failed/.test(msg)) { status = 400; msg = 'Valor fora do permitido (verifique números negativos).'; }
   if (status >= 500) console.error(err);

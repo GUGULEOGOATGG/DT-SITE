@@ -1,6 +1,6 @@
 {
   "name": "dt-estoque",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Sistema de controle de estoque para loja de elétrica, hidráulica e segurança eletrônica",
   "main": "electron/main.js",
   "type": "commonjs",

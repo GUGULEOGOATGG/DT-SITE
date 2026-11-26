@@ -9,6 +9,10 @@ services:
     envVars:
       - key: DB_PATH
         value: /var/data/estoque.db
+      - key: TZ
+        value: America/Sao_Paulo
+      - key: TRUST_PROXY
+        value: "1"
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_SENHA

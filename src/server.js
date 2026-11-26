@@ -3,7 +3,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { db, transacao, hashSenha, conferirSenha, popularSeVazio, DB_PATH } = require('./db');
 
+const backup = require('./backup');
+
 popularSeVazio();
+backup.iniciarAgendamento();
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -186,7 +189,7 @@ function filtrosProdutos(q) {
   const params = [];
   if (q.inativos !== '1') where.push('p.ativo = 1');
   if (q.busca) {
-    where.push('(p.nome LIKE ? OR p.codigo LIKE ? OR p.codigo_barras = ? OR p.marca LIKE ?)');
+    where.push('(sem_acento(p.nome) LIKE sem_acento(?) OR p.codigo LIKE ? OR p.codigo_barras = ? OR sem_acento(p.marca) LIKE sem_acento(?))');
     const t = `%${q.busca}%`;
     params.push(t, t, q.busca, t);
   }
@@ -314,7 +317,7 @@ app.get('/api/movimentacoes', rota((req) => {
   if (q.tipo) { where.push('m.tipo = ?'); params.push(q.tipo); }
   if (q.de) { where.push('date(m.criado_em) >= date(?)'); params.push(q.de); }
   if (q.ate) { where.push('date(m.criado_em) <= date(?)'); params.push(q.ate); }
-  if (q.busca) { where.push('(p.nome LIKE ? OR p.codigo LIKE ? OR m.documento LIKE ?)'); const t = `%${q.busca}%`; params.push(t, t, t); }
+  if (q.busca) { where.push('(sem_acento(p.nome) LIKE sem_acento(?) OR p.codigo LIKE ? OR m.documento LIKE ?)'); const t = `%${q.busca}%`; params.push(t, t, t); }
   const sql = `SELECT m.*, p.codigo, p.nome AS produto, p.unidade, u.nome AS usuario
     FROM movimentacoes m JOIN produtos p ON p.id = m.produto_id LEFT JOIN usuarios u ON u.id = m.usuario_id
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY m.id DESC LIMIT ?`;
@@ -367,15 +370,13 @@ app.get('/api/relatorios/movimentacoes.csv', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Backup do banco (admin): baixa uma cópia consistente do arquivo SQLite
-app.get('/api/backup', somenteAdmin, (req, res, next) => {
-  try {
-    const fs = require('node:fs');
-    const os = require('node:os');
-    const destino = path.join(os.tmpdir(), `backup-${Date.now()}.db`);
-    db.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
-    res.download(destino, `estoque-backup-${new Date().toISOString().slice(0, 10)}.db`, () => fs.rm(destino, { force: true }, () => {}));
-  } catch (e) { next(e); }
+// ---------- Backups (admin) ----------
+app.get('/api/backups', somenteAdmin, rota(() => ({ pasta: backup.BACKUP_DIR, itens: backup.listar() })));
+app.post('/api/backups', somenteAdmin, rota(() => ({ arquivo: backup.backupManual() })));
+app.get('/api/backups/:arquivo', somenteAdmin, (req, res, next) => {
+  const p = backup.caminhoDe(req.params.arquivo);
+  if (!p) return next(new ErroHttp(404, 'Backup não encontrado.'));
+  res.download(p, req.params.arquivo);
 });
 
 // ---------- Erros ----------

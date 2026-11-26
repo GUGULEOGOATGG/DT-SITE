@@ -22,14 +22,14 @@ O sistema é um **programa de computador**: abre numa janela própria, tem ícon
 ### Instalar
 
 **Opção A: versão portátil (.zip)**
-1. Baixe `Controle-de-Estoque-1.0.0-Windows-portatil.zip`.
+1. Baixe `Controle-de-Estoque-1.1.0-Windows-portatil.zip`.
 2. Clique com o botão direito → **Extrair tudo…** (por exemplo, para `C:\Controle de Estoque`).
 3. Dê dois cliques em **Controle de Estoque.exe**. Se quiser, crie um atalho na área de trabalho (botão direito → Enviar para → Área de trabalho).
 
 **Opção B: instalador (.exe)**, que cria atalho e entrada no Menu Iniciar sozinho:
 1. No GitHub, abra a aba **Actions** → **Instalador Windows** → **Run workflow**.
 2. Espere cerca de 5 minutos e baixe o arquivo em **Artifacts** → `Controle-de-Estoque-Windows`.
-3. Rode `Instalar-Controle-de-Estoque-1.0.0.exe` e siga os passos.
+3. Rode `Instalar-Controle-de-Estoque-1.1.0.exe` e siga os passos.
 
 > Na primeira vez, o Windows pode mostrar **"O Windows protegeu o computador"** (porque o programa não tem assinatura digital paga). Clique em **Mais informações → Executar assim mesmo**.
 
@@ -38,9 +38,12 @@ Login inicial: **admin@loja.com** / **admin123**. Troque a senha no primeiro ace
 ### Onde ficam os dados e os backups
 
 - Banco de dados: `%APPDATA%\Controle de Estoque\dados\estoque.db`
-- **Backup automático:** toda vez que o programa abre, ele guarda uma cópia do dia em `...\dados\backups` (mantém os 15 últimos dias).
-- Menu **Arquivo → Fazer backup agora** (Ctrl+B): salva uma cópia onde você quiser. Recomendo um pendrive ou o Google Drive, para não perder tudo se o PC der problema.
-- Menu **Arquivo → Restaurar backup**: volta os dados de um backup. Antes de restaurar, ele guarda uma cópia dos dados atuais por segurança.
+- **Backup automático:** uma cópia por dia em `...\dados\backups` (mantém os 15 últimos dias), mesmo se o programa ficar aberto por vários dias.
+- Tudo de backup fica na barra lateral, em **Backup** (só para administradores):
+  - **Fazer backup agora**: cópia na hora.
+  - **Salvar cópia em…**: guarda num pendrive ou no Google Drive, para não perder nada se o PC der problema.
+  - **Restaurar**: volta os dados de um backup da lista ou de um arquivo. Antes, ele guarda uma cópia dos dados atuais por segurança, e o programa reinicia sozinho.
+- Atalhos: **F5** recarrega, **Ctrl + / Ctrl −** zoom, **F11** tela cheia.
 - Desinstalar o programa **não apaga** os dados.
 
 **Trocar de computador:** faça um backup no PC antigo, instale o programa no novo e use *Restaurar backup*.
@@ -77,6 +80,8 @@ O banco fica em `data/estoque.db`. Para começar sem os produtos de exemplo, rod
 | `DB_PATH` | Onde fica o arquivo do banco | `data/estoque.db` |
 | `ADMIN_EMAIL` / `ADMIN_SENHA` | Primeiro administrador (só na criação do banco) | `admin@loja.com` / `admin123` |
 | `SEM_DADOS_EXEMPLO` | `1` para não inserir os produtos de exemplo | — |
+| `BACKUP_DIR` | Pasta dos backups automáticos | `data/backups` |
+| `BACKUP_MANTER` | Quantos dias de backup automático guardar | `15` |
 
 ## Como colocar na nuvem
 
@@ -136,7 +141,7 @@ docker run -d --name estoque --restart unless-stopped -p 3000:3000 -v estoque-da
 
 ### Backup: não pule esta parte
 
-- Pelo sistema: **Relatórios → Baixar backup** (admin). Guarde o arquivo `.db` no Google Drive/OneDrive.
+- O servidor também faz **backup automático diário** em `data/backups` (ou na pasta de `BACKUP_DIR`). Na barra lateral, em **Backup**, dá para fazer um backup na hora e baixar qualquer um da lista. Guarde cópias no Google Drive/OneDrive.
 - No VPS, backup automático diário às 3h da manhã (`crontab -e`):
   ```
   0 3 * * * docker exec estoque node -e "new (require('node:sqlite').DatabaseSync)('/data/estoque.db').exec(\"VACUUM INTO '/data/backup-$(date +\%a).db'\")"

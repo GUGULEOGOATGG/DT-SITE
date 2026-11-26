@@ -8,6 +8,9 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'estoq
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);
+// Busca sem acento e sem diferenciar maiúsculas: "camera" encontra "Câmera"
+db.function('sem_acento', { deterministic: true }, (v) =>
+  v == null ? null : String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
 
 db.exec(`

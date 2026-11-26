@@ -34,6 +34,8 @@ test('dados de exemplo cobrem os três setores', async () => {
   const setores = d.porSetor.map((s) => s.setor).sort();
   assert.deepEqual(setores, ['eletrica', 'hidraulica', 'seguranca']);
   assert.ok(d.alertas.length > 0);
+  const busca = (await req('GET', '/produtos?busca=camera')).dados;
+  assert.ok(busca.length >= 2 && busca.every((p) => /Câmera/.test(p.nome)), 'busca ignora acentos');
 });
 
 test('cadastro, entrada, saída, ajuste e bloqueio de estoque negativo', async () => {
@@ -77,7 +79,7 @@ test('operador não acessa funções de admin', async () => {
   await req('POST', '/usuarios', { nome: 'Op', email: 'op@loja.com', senha: '123456', perfil: 'operador' });
   const tk = (await req('POST', '/login', { email: 'op@loja.com', senha: '123456' })).dados.token;
   assert.equal((await req('GET', '/usuarios', null, tk)).status, 403);
-  assert.equal((await req('GET', '/backup', null, tk)).status, 403);
+  assert.equal((await req('GET', '/backups', null, tk)).status, 403);
   assert.equal((await req('GET', '/produtos', null, tk)).status, 200);
 });
 
@@ -86,8 +88,13 @@ test('relatório CSV e backup', async () => {
   assert.equal(csv.status, 200);
   assert.match(csv.dados, /Código;Cód\. barras;Produto/);
   assert.match(csv.dados, /REPOR/);
-  const r = await fetch(base + '/backup', { headers: { Authorization: `Bearer ${token}` } });
+  const lista = (await req('GET', '/backups')).dados;
+  assert.equal(lista.itens.filter((b) => b.tipo === 'automatico').length, 1, 'backup automático do dia criado ao iniciar');
+  const novo = (await req('POST', '/backups')).dados.arquivo;
+  assert.match(novo, /^estoque-manual-/);
+  const r = await fetch(base + '/backups/' + novo, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(r.status, 200);
   const buf = Buffer.from(await r.arrayBuffer());
   assert.equal(buf.subarray(0, 15).toString(), 'SQLite format 3');
+  assert.equal((await req('GET', '/backups/..%2Fteste.db')).status, 404);
 });

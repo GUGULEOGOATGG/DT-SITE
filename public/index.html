@@ -4,46 +4,63 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Controle de Estoque</title>
+  <link rel="icon" href="icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Tela de login -->
+  <!-- Login -->
   <section id="tela-login" class="login" hidden>
-    <form id="form-login" class="cartao login-cartao">
-      <div class="marca"><span class="logo">⚡</span> Controle de Estoque</div>
-      <p class="sub">Elétrica · Hidráulica · Segurança Eletrônica</p>
-      <label>E-mail<input name="email" type="email" required autocomplete="username"></label>
-      <label>Senha<input name="senha" type="password" required autocomplete="current-password"></label>
-      <button class="btn primario" type="submit">Entrar</button>
-      <p class="erro" id="erro-login"></p>
-    </form>
+    <div class="login-marca">
+      <div class="login-marca-conteudo">
+        <img src="icon.png" alt="" class="login-icone">
+        <h1>Controle de Estoque</h1>
+        <p>Tudo o que entra e sai da loja, organizado num só lugar.</p>
+        <ul class="login-setores">
+          <li><span class="ponto eletrica"></span>Elétrica</li>
+          <li><span class="ponto hidraulica"></span>Hidráulica</li>
+          <li><span class="ponto seguranca"></span>Segurança Eletrônica</li>
+        </ul>
+      </div>
+    </div>
+    <div class="login-form-lado">
+      <form id="form-login" class="login-form">
+        <h2>Bem-vindo de volta</h2>
+        <p class="suave">Entre com seu e-mail e senha para continuar.</p>
+        <label class="campo">E-mail<input name="email" type="email" required autocomplete="username" placeholder="voce@loja.com"></label>
+        <label class="campo">Senha<input name="senha" type="password" required autocomplete="current-password" placeholder="••••••••"></label>
+        <button class="btn primario grande" type="submit">Entrar</button>
+        <p class="erro" id="erro-login"></p>
+      </form>
+    </div>
   </section>
 
   <!-- Aplicação -->
   <div id="app" hidden>
-    <header class="topo">
-      <button class="btn icone" id="btn-menu" aria-label="Menu">☰</button>
-      <div class="marca"><span class="logo">⚡</span> Estoque</div>
-      <div class="usuario"><span id="nome-usuario"></span>
-        <button class="btn fantasma" id="btn-senha">Senha</button>
-        <button class="btn fantasma" id="btn-sair">Sair</button>
+    <aside class="lateral" id="lateral">
+      <div class="lateral-marca">
+        <img src="icon.png" alt="">
+        <div><strong>Estoque</strong><small>Gestão da loja</small></div>
       </div>
-    </header>
-    <nav class="menu" id="menu">
-      <a href="#painel">📊 Painel</a>
-      <a href="#produtos">📦 Produtos</a>
-      <a href="#movimentar">🔄 Entrada / Saída</a>
-      <a href="#historico">🕘 Histórico</a>
-      <a href="#categorias">🏷️ Categorias</a>
-      <a href="#fornecedores">🚚 Fornecedores</a>
-      <a href="#relatorios">📄 Relatórios</a>
-      <a href="#usuarios" class="so-admin">👤 Usuários</a>
-    </nav>
-    <main id="conteudo"></main>
+      <nav class="lateral-nav" id="menu"></nav>
+      <div class="lateral-usuario">
+        <div class="avatar" id="avatar"></div>
+        <div class="lateral-usuario-info"><strong id="nome-usuario"></strong><small id="perfil-usuario"></small></div>
+        <button class="btn-icone claro" id="btn-senha" title="Alterar senha"></button>
+        <button class="btn-icone claro" id="btn-sair" title="Sair"></button>
+      </div>
+    </aside>
+    <div class="fundo-lateral" id="fundo-lateral"></div>
+    <div class="area">
+      <header class="topo-movel">
+        <button class="btn-icone" id="btn-menu" aria-label="Abrir menu"></button>
+        <strong>Estoque</strong>
+      </header>
+      <main id="conteudo"></main>
+    </div>
   </div>
 
-  <dialog id="modal"><form method="dialog" id="modal-form" class="modal-corpo"></form></dialog>
-  <div id="aviso" class="aviso" role="status"></div>
+  <dialog id="modal"><form method="dialog" id="modal-form"></form></dialog>
+  <div id="avisos" class="avisos" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>
